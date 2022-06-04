@@ -275,6 +275,117 @@ def normalization_stats(completeData):
 
     return data_mean, data_std, dimensions_to_ignore, dimensions_to_use
 
+def readCSVasFloat_TotalCap(filename):
+    """
+    Borrowed from SRNN code. Reads a csv and returns a float matrix.
+    https://github.com/asheshjain399/NeuralModels/blob/master/neuralmodels/utils.py#L34
+    Args
+      filename: string. Path to the csv file
+    Returns
+      returnArray: the read data in a float32 matrix
+    """
+    returnArray = []
+    lines = open(filename).readlines()[1:]
+    for line in lines:
+        line = line.replace('\t',' ')
+        line = line.split(' ')
+        line.pop()
+        if len(line) > 0:
+            returnArray.append(np.array([float(x) for x in line]))
+
+    returnArray = np.array(returnArray)
+    return returnArray
+
+def readCSVasFloat_TotalCap_calib(filename):
+    """
+    Borrowed from SRNN code. Reads a csv and returns a float matrix.
+    https://github.com/asheshjain399/NeuralModels/blob/master/neuralmodels/utils.py#L34
+    Args
+      filename: string. Path to the csv file
+    Returns
+      returnArray: the read data in a float32 matrix
+    """
+    returnArray = []
+    lines = open(filename).readlines()[1:]
+    for line in lines:
+        line = line.replace('\t',' ')
+        line = line.replace('\n',' ')
+        line = line.split(' ')
+        line.pop()
+        if len(line) > 0:
+            returnArray.append(np.array([float(x) for x in line[1:]]))
+    returnArray = np.array(returnArray)
+    
+    return returnArray
+
+def readCSVasFloat_TotalCap_Imu_cal(filename,cal_bone_filename,cal_glob_filename):
+    """
+    Borrowed from SRNN code. Reads a csv and returns a float matrix.
+    https://github.com/asheshjain399/NeuralModels/blob/master/neuralmodels/utils.py#L34
+    Args
+      filename: string. Path to the csv file
+    Returns
+      returnArray: the read data in a float32 matrix
+    """
+    orientation = []
+    acceleration = []
+    lines = open(filename).readlines()[1:]
+    cal_bone = readCSVasFloat_TotalCap_calib(cal_bone_filename)
+    cal_glob = readCSVasFloat_TotalCap_calib(cal_glob_filename)
+
+    ## from w,x,y,z to x,y,z,w
+    cal_glob = cal_glob[:,[1,2,3,0]]
+
+    for line in lines:
+        line = line.replace('\t',' ')
+        line = line.replace('\n',' ')
+        line = line.split(' ')
+        line.pop()
+        if len(line) > 1:
+            orientation.append(np.array([float(x) for x in line[1:5]]))
+            acceleration.append(np.array([float(x) for x in line[5:]]))
+            
+    orientation = np.array(orientation)
+    acceleration = np.array(acceleration)
+    orientation = np.reshape(orientation,(-1,52))
+    acceleration = np.reshape(acceleration,(-1,39))
+    
+    ##orientation calibration 
+    n, d = orientation.shape
+    orientation = orientation.reshape(n,13,-1) #[n, 13, 4]
+    cal = np.matmul(cal_bone,cal_glob.transpose(1,0))
+
+    cal_orientation = []
+    
+    for x in orientation:
+        
+        cal_orientation.append(np.dot(cal,x))
+        
+    cal_orientation = np.array(cal_orientation)
+    cal_orientation = cal_orientation.reshape(-1,52)
+    
+    ## accerlation calibration
+    n, d = acceleration.shape 
+    acceleration = acceleration.reshape(n,13,-1) #[n, 13, 3]
+    
+    cal_acceleration=np.einsum('mc,fnc->fnm',cal_glob ,orientation) #[n, 13, 13]
+    cal_acceleration=np.einsum('fnm,fnc->fmc',cal_acceleration ,acceleration) #fmn or fnm
+    a_g = np.array([0,0.98707,0])
+    for i in range(n):
+        for j in range(13):
+            cal_acceleration[i,j,:]=cal_acceleration[i,j,:]-a_g
+    
+    cal_acceleration = cal_acceleration.reshape(-1,39)
+    #cal_orientation = cal_orientation[:,0:4]
+    #cal_acceleration = acceleration[:,0:3]
+    limb_list_acc = [3,4,5,9,10,11,12,13,14,21,22,23,24,25,26]
+    limb_list_ori = [4,5,6,7,12,13,14,15,16,17,18,19,29,30,31,32,33,34,35,36] 
+    cal_ori_limbs = cal_orientation[:,limb_list_ori]
+    
+    cal_acc_limbs = cal_acceleration[:,limb_list_acc]
+    
+    return cal_acc_limbs
+
 
 def define_actions(action):
     """
@@ -307,6 +418,27 @@ def define_actions(action):
 """all methods above are borrowed from https://github.com/una-dinosauria/human-motion-prediction"""
 
 
+def define_actions_TotalCap(action):
+    """
+    Define the list of actions we are using.
+
+    Args
+      action: String with the passed action. Could be "all"
+    Returns
+      actions: List of strings of actions
+    Raises
+      ValueError if the action is not included in H3.6M
+    """
+
+    actions = ["acting", "freestyle", "rom", "walking"]
+    if action in actions:
+        return [action]
+
+    if action == "all":
+        return actions
+
+    raise (ValueError, "Unrecognized action: %d" % action)
+
 def define_actions_cmu(action):
     """
     Define the list of actions we are using.
@@ -328,6 +460,215 @@ def define_actions_cmu(action):
         return actions
 
     raise (ValueError, "Unrecognized action: %d" % action)
+
+def load_data_totalcap_3d(path_to_dataset, subjects, actions, sample_rate, seq_len,test_manner="8"):
+    """
+
+    adapted from
+    https://github.com/una-dinosauria/human-motion-prediction/src/data_utils.py#L216
+    :param path_to_dataset:
+    :param subjects:
+    :param actions:
+    :param sample_rate:
+    :param seq_len:
+    :return:
+    """
+    sampled_seq = []
+    complete_seq = []
+    for subj in subjects:
+        for action_idx in np.arange(len(actions)):
+            action = actions[action_idx]
+            if(not (subj == 5) and not (subj ==4) ):
+                for subact in [1, 2, 3]:  # subactions
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
+
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, subact)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+                    num_frames = len(even_list)
+                    the_sequence = np.array(action_sequence[even_list, :])
+                    the_seq = Variable(torch.from_numpy(the_sequence)).float().cuda()
+
+                    fs = np.arange(0, num_frames - seq_len + 1)
+                    fs_sel = fs
+                    for i in np.arange(seq_len - 1):
+                        fs_sel = np.vstack((fs_sel, fs + i + 1))
+                    fs_sel = fs_sel.transpose()
+                    seq_sel = the_sequence[fs_sel, :]
+                    if len(sampled_seq) == 0:
+                        sampled_seq = seq_sel
+                        complete_seq = the_sequence
+                    else:
+                        if((subj==2) and (action=='rom') and (subact==3)):
+                            print("Skip S2 ROM3!")
+                        else:
+                            sampled_seq = np.concatenate((sampled_seq, seq_sel), axis=0)
+                            complete_seq = np.append(complete_seq, the_sequence, axis=0) 
+            elif(subj==5): 
+                if(action == ("acting") or action == ("rom")):
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 3))
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, 3)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+                    num_frames = len(even_list)
+                    the_sequence = np.array(action_sequence[even_list, :])
+                    the_seq = Variable(torch.from_numpy(the_sequence)).float().cuda()
+
+                    fs = np.arange(0, num_frames - seq_len + 1)
+                    fs_sel = fs
+                    for i in np.arange(seq_len - 1):
+                        fs_sel = np.vstack((fs_sel, fs + i + 1))
+                    fs_sel = fs_sel.transpose()
+                    seq_sel = the_sequence[fs_sel, :]
+                    if len(sampled_seq) == 0:
+                        sampled_seq = seq_sel
+                        complete_seq = the_sequence
+                    else:
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel), axis=0)
+                        complete_seq = np.append(complete_seq, the_sequence, axis=0)
+                elif(action == "freestyle"):
+                    for subact in [1,3]: # subactions
+                        print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, subact)
+                        action_sequence = readCSVasFloat_TotalCap(filename)
+                        n, d = action_sequence.shape
+                        even_list = range(0, n, sample_rate)
+                        num_frames = len(even_list)
+                        the_sequence = np.array(action_sequence[even_list, :])
+                        the_seq = Variable(torch.from_numpy(the_sequence)).float().cuda()
+
+                        fs = np.arange(0, num_frames - seq_len + 1)
+                        fs_sel = fs
+                        for i in np.arange(seq_len - 1):
+                            fs_sel = np.vstack((fs_sel, fs + i + 1))
+                        fs_sel = fs_sel.transpose()
+                        seq_sel = the_sequence[fs_sel, :]
+                        if len(sampled_seq) == 0:
+                            sampled_seq = seq_sel
+                            complete_seq = the_sequence
+                        else:
+                            sampled_seq = np.concatenate((sampled_seq, seq_sel), axis=0)
+                            complete_seq = np.append(complete_seq, the_sequence, axis=0)
+                else:### (action =="walking"):
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 2))
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, 2)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+                    num_frames = len(even_list)
+                    the_sequence = np.array(action_sequence[even_list, :])
+                    the_seq = Variable(torch.from_numpy(the_sequence)).float().cuda()
+
+                    fs = np.arange(0, num_frames - seq_len + 1)
+                    fs_sel = fs
+                    for i in np.arange(seq_len - 1):
+                        fs_sel = np.vstack((fs_sel, fs + i + 1))
+                    fs_sel = fs_sel.transpose()
+                    seq_sel = the_sequence[fs_sel, :]
+                    if len(sampled_seq) == 0:
+                        sampled_seq = seq_sel
+                        complete_seq = the_sequence
+                    else:
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel), axis=0)
+                        complete_seq = np.append(complete_seq, the_sequence, axis=0)
+            else:
+                # Action in s4 for testing
+                ## freesytle
+                if(action == "freestyle"):
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 1))
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, 1)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+
+                    num_frames1 = len(even_list)
+                    the_sequence1 = np.array(action_sequence[even_list, :])
+                    the_seq1 = Variable(torch.from_numpy(the_sequence1)).float().cuda()
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 3))
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, 3)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+                    num_frames2 = len(even_list)
+                    the_sequence2 = np.array(action_sequence[even_list, :])
+                    the_seq2 = Variable(torch.from_numpy(the_sequence2)).float().cuda()
+
+                    if test_manner == "all":
+                        # # use all for testing
+                        fs_sel1 = [np.arange(i, i + seq_len) for i in range(num_frames1 - 100)]
+                        fs_sel2 = [np.arange(i, i + seq_len) for i in range(num_frames2 - 100)]
+                    elif test_manner == "8":
+                        # randomly selectd single batch data of size 8 
+                        fs_sel1, fs_sel2 = find_indices_srnn(num_frames1, num_frames2, seq_len)
+
+                    seq_sel1 = the_sequence1[fs_sel1, :]
+                    seq_sel2 = the_sequence2[fs_sel2, :]
+                    if len(sampled_seq) == 0:
+                        sampled_seq = seq_sel1
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel2), axis=0)
+                        complete_seq = the_sequence1
+                        complete_seq = np.append(complete_seq, the_sequence2, axis=0)
+                    else:
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel1), axis=0)
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel2), axis=0)
+                        complete_seq = np.append(complete_seq, the_sequence1, axis=0)
+                        complete_seq = np.append(complete_seq, the_sequence2, axis=0)
+                ## acting or rom3 
+                elif action ==("acting") or action == ("rom"):
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 3))
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, 3)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+
+                    num_frames1 = len(even_list)
+                    the_sequence1 = np.array(action_sequence[even_list, :])
+                    the_seq1 = Variable(torch.from_numpy(the_sequence1)).float().cuda()
+                    if test_manner == "all":
+                        ## use all for testing
+                        fs_sel1 = [np.arange(i, i + seq_len) for i in range(num_frames1 - 100)]
+                    elif test_manner == "8":
+                        # randomly selectd single batch data of size 8 
+                        fs_sel1 = find_indices_srnn_single(num_frames1, seq_len)
+
+                    seq_sel1 = the_sequence1[fs_sel1, :]
+                    if len(sampled_seq) == 0:
+                        sampled_seq = seq_sel1
+                        complete_seq = the_sequence1
+                    else:
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel1), axis=0)
+                        complete_seq = np.append(complete_seq, the_sequence1, axis=0)
+                else:  
+                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 2))
+                    filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(path_to_dataset, subj, action, 2)
+                    action_sequence = readCSVasFloat_TotalCap(filename)
+                    n, d = action_sequence.shape
+                    even_list = range(0, n, sample_rate)
+
+                    num_frames1 = len(even_list)
+                    the_sequence1 = np.array(action_sequence[even_list, :])
+                    the_seq1 = Variable(torch.from_numpy(the_sequence1)).float().cuda()
+                    if test_manner == "all":
+                        # # use all for testing
+                        fs_sel1 = [np.arange(i, i + seq_len) for i in range(num_frames1 - 100)]
+                    elif test_manner == "8":
+                        # randomly selectd single batch data of size 8 
+                        fs_sel1 = find_indices_srnn_single(num_frames1, seq_len)
+
+                    seq_sel1 = the_sequence1[fs_sel1, :]
+                    if len(sampled_seq) == 0:
+                        sampled_seq = seq_sel1
+                        complete_seq = the_sequence1
+                    else:
+                        sampled_seq = np.concatenate((sampled_seq, seq_sel1), axis=0)
+                        complete_seq = np.append(complete_seq, the_sequence1, axis=0)
+                
+    dimensions_to_use = list(range(0, 63))
+
+    return sampled_seq, dimensions_to_use
+
 
 
 def load_data_cmu(path_to_dataset, actions, input_n, output_n, data_std=0, data_mean=0, is_test=False):
