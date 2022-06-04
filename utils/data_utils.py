@@ -3,7 +3,7 @@
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
-# from torch.autograd.variable import Variable
+from torch.autograd.variable import Variable
 import os
 from utils import forward_kinematics
 
@@ -1002,3 +1002,59 @@ def find_indices_srnn(frame_num1, frame_num2, seq_len, input_n=10):
             idxo1 = np.vstack((idxo1, idxs1))
             idxo2 = np.vstack((idxo2, idxs2))
     return idxo1, idxo2
+
+def find_indices_srnn_single(frame_num1, seq_len, input_n=10):
+    """
+    Adapted from https://github.com/una-dinosauria/human-motion-prediction/blob/master/src/seq2seq_model.py#L478
+
+    which originaly from
+    In order to find the same action indices as in SRNN.
+    https://github.com/asheshjain399/RNNexp/blob/master/structural_rnn/CRFProblems/H3.6m/processdata.py#L325
+    """
+
+    # Used a fixed dummy seed, following
+    # https://github.com/asheshjain399/RNNexp/blob/srnn/structural_rnn/forecastTrajectories.py#L29
+    SEED = 1234567890
+    rng = np.random.RandomState(SEED)
+
+    T1 = frame_num1 - 150
+    idxo1 = None
+    for _ in np.arange(0, 128):
+        idx_ran1 = rng.randint(16, T1)
+        idxs1 = np.arange(idx_ran1 + 50 - input_n, idx_ran1 + 50 - input_n + seq_len)
+        if idxo1 is None:
+            idxo1 = idxs1
+        else:
+            idxo1 = np.vstack((idxo1, idxs1))
+    return idxo1
+
+
+def select_inertia_changes_clips(sequence,threshold=50):
+    #threshold:inches of taltal joint movement
+    
+    clips,total_n,_ = sequence.shape
+    selected_clips=[]
+    
+
+    for i in range(clips):
+        input_head_joint = sequence[i,:,0:3]
+        input_Hips_joint = sequence[i,:,6:9]
+        input_RightForeArm_joint = sequence[i,:,27:30]
+        input_LeftForeArm_joint = sequence[i,:,39:42]
+        input_RightLeg_joint = sequence[i,:,48:51]
+        input_LeftLeg_joint = sequence[i,:,57:60]
+        pose_movement=[]
+        for j in range(1,total_n):
+            pose_movement.append(input_head_joint[j,0:3]-input_head_joint[j-1,0:3])
+            pose_movement.append(input_Hips_joint[j,0:3]-input_Hips_joint[j-1,0:3])
+            pose_movement.append(input_RightForeArm_joint[j,0:3]-input_RightForeArm_joint[j-1,0:3])
+            pose_movement.append(input_LeftForeArm_joint[j,0:3]-input_LeftForeArm_joint[j-1,0:3])
+            pose_movement.append(input_RightLeg_joint[j,0:3]-input_RightLeg_joint[j-1,0:3])
+            pose_movement.append(input_LeftLeg_joint[j,0:3]-input_LeftLeg_joint[j-1,0:3])
+        
+        pose_movement=np.linalg.norm(pose_movement,axis=1)
+        movement_sum=sum(pose_movement)
+        if movement_sum>=threshold:
+            selected_clips.append(i)
+            
+    return selected_clips

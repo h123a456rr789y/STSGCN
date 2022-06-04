@@ -134,6 +134,9 @@ class Datasets(Dataset):
         dimensions_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
         self.dimensions_to_use = np.setdiff1d(np.arange(96), dimensions_to_ignore)
 
+
+        #print(self.data_idx)
+
     def __len__(self):
         return np.shape(self.data_idx)[0]
 
