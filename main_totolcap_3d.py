@@ -8,7 +8,7 @@ import torch.autograd
 import torch
 import numpy as np
 from utils.loss_funcs import *
-from utils.data_utils import define_actions
+from utils.data_utils import define_actions_TotalCap
 from utils.h36_3d_viz import visualize
 from utils.parser import args
 
@@ -26,7 +26,7 @@ model = Model(args.input_dim,args.input_n,
 
 print('total number of parameters of the network is: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
-model_name='h36_3d_'+str(args.output_n)+'frames_ckpt'
+model_name='totalcapture'+str(args.output_n)+'frames_ckpt'
 
 def train():
 
@@ -39,18 +39,19 @@ def train():
 
     train_loss = []
     val_loss = []
-    dataset = datasets.Datasets(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=0)
+    dataset = datasets.TotalCap3D(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=0)
     print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
     data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-    vald_dataset = datasets.Datasets(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=1)
+    vald_dataset = datasets.TotalCap3D(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=1)
     print('>>> Validation dataset length: {:d}'.format(vald_dataset.__len__()))
     vald_loader = DataLoader(vald_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-    dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
-                    26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-                    46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
-                    75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
+    dim_used = np.array(list(range(0, 63)))
+    # dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
+    #                 26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+    #                 46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
+    #                 75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
 
 
 
@@ -75,7 +76,7 @@ def train():
 
 
           if cnt % 200 == 0:
-            print('[%d, %5d]  training loss: %.3f' %(epoch + 1, cnt + 1, loss.item())) 
+            print('[%d, %5d]  training loss: %.3f' %(epoch + 1, cnt + 1, loss.item()*25.4)) 
 
           loss.backward()  
           if args.clip_grad is not None:
@@ -104,9 +105,9 @@ def train():
 
               loss=mpjpe_error(sequences_predict,sequences_gt)
               if cnt % 200 == 0:
-                        print('[%d, %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item())) 
+                        print('[%d, %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()*25.4)) 
               running_loss+=loss*batch_dim
-          val_loss.append(running_loss.detach().cpu()/n)
+          val_loss.append((running_loss.detach().cpu()/n)*25.4)
       if args.use_scheduler:
         scheduler.step()
 
@@ -128,21 +129,22 @@ def test():
   model.eval()
   accum_loss=0  
   n_batches=0 # number of batches for all the sequences
-  actions=define_actions(args.actions_to_consider)
-  dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
-                    26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-                    46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
-                    75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
+  actions=define_actions_TotalCap(args.actions_to_consider)
+  dim_used = np.array(list(range(0, 63)))
+  # dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
+  #                   26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+  #                   46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
+  #                   75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
   # joints at same loc
-  joint_to_ignore = np.array([16, 20, 23, 24, 28, 31])
-  index_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
-  joint_equal = np.array([13, 19, 22, 13, 27, 30])
-  index_to_equal = np.concatenate((joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
+  # joint_to_ignore = np.array([16, 20, 23, 24, 28, 31])
+  # index_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
+  # joint_equal = np.array([13, 19, 22, 13, 27, 30])
+  # index_to_equal = np.concatenate((joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
 
   for action in actions:
     running_loss=0
     n=0
-    dataset_test = datasets.Datasets(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
+    dataset_test = datasets.TotalCap3D(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
     print('>>> test action for sequences: {:d}'.format(dataset_test.__len__()))
 
     test_loader = DataLoader(dataset_test, batch_size=args.batch_size_test, shuffle=False, num_workers=0, pin_memory=True)
@@ -168,15 +170,15 @@ def test():
         all_joints_seq[:,:,dim_used] = sequences_predict
 
 
-        all_joints_seq[:,:,index_to_ignore] = all_joints_seq[:,:,index_to_equal]
+        # all_joints_seq[:,:,index_to_ignore] = all_joints_seq[:,:,index_to_equal]
 
-        loss=mpjpe_error(all_joints_seq.view(-1,args.output_n,32,3),sequences_gt.view(-1,args.output_n,32,3))
+        loss=mpjpe_error(all_joints_seq.view(-1,args.output_n,21,3),sequences_gt.view(-1,args.output_n,21,3))
         running_loss+=loss*batch_dim
         accum_loss+=loss*batch_dim
 
-    print('loss at test subject for action : '+str(action)+ ' is: '+ str(running_loss/n))
+    print('loss at test subject for action : '+str(action)+ ' is: '+ str((running_loss/n)*25.4))
     n_batches+=n
-  print('overall average loss in mm is: '+str(accum_loss/n_batches))
+  print('overall average loss in mm is: '+str((accum_loss/n_batches)*25.4))
 
 
 if __name__ == '__main__':

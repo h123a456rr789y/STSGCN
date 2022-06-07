@@ -10,7 +10,7 @@ parser.add_argument('--data_dir',type=str,default='./data',help='path to the unz
 parser.add_argument('--input_n',type=int,default=10,help="number of model's input frames")
 parser.add_argument('--output_n',type=int,default=10,help="number of model's output frames")
 parser.add_argument('--skip_rate',type=int,default=1,choices=[1,5],help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
-parser.add_argument('--joints_to_consider',type=int,default=22,choices=[16,18,22],help='number of joints to use, defaults=16 for H36M angles, 22 for H36M 3D or 18 for AMASS/3DPW')
+parser.add_argument('--joints_to_consider',type=int,default=22,choices=[16,18,21,22],help='number of joints to use, defaults=16 for H36M angles, 22 for H36M 3D or 18 for AMASS/3DPW')
 
 
 #ARGS FOR THE MODEL
@@ -45,7 +45,7 @@ parser.add_argument('--use_scheduler',type=bool,default=True,help= 'use MultiSte
 parser.add_argument('--milestones',type=list,default=[15,25,35,40],help= 'the epochs after which the learning rate is adjusted by gamma')
 parser.add_argument('--gamma',type=float,default=0.1,help= 'gamma correction to the learning rate, after reaching the milestone epochs')
 parser.add_argument('--clip_grad',type=float,default=None,help= 'select max norm to clip gradients')
-parser.add_argument('--model_path',type=str,default='./checkpoints/CKPT_3D_H36M',help= 'directory with the models checkpoints ')
+parser.add_argument('--model_path',type=str,default='./checkpoints/CKPT_TotalCapture',help= 'directory with the models checkpoints ')
 
 
 #FLAGS FOR THE VISUALIZATION

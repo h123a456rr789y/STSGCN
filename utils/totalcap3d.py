@@ -11,7 +11,7 @@ import os
 
 class TotalCap3D(Dataset):
 
-    def __init__(self, data_dir,input_n,output_n,skip_rate, split=0,actions=None,inertia_thres=70):
+    def __init__(self, data_dir,input_n,output_n,skip_rate, split=0, actions=None,inertia_thres=70):
         """
         :param path_to_data:
         :param actions:
@@ -32,7 +32,13 @@ class TotalCap3D(Dataset):
         seq_len = self.in_n + self.out_n
 
         subs = np.array([[1, 2, 4], [3], [5]], dtype=object)
-        acts = data_utils.define_actions_TotalCap(actions)
+        
+        if actions is None:
+            acts = data_utils.define_actions_TotalCap(actions)
+        else:
+            acts = actions
+        
+        
 
 
         subs = subs[split]
@@ -42,12 +48,12 @@ class TotalCap3D(Dataset):
         complete_seq = []
         for subj in subs:
             for action_idx in np.arange(len(acts)):
-                action = actions[action_idx]
+                action = acts[action_idx]
                 if(not (subj == 5) and not (subj ==4) ):
                     for subact in [1, 2, 3]:  # subactions
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
 
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, subact)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, subact)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
@@ -65,7 +71,7 @@ class TotalCap3D(Dataset):
                 elif(subj==5): 
                     if(action == ("acting") or action == ("rom")):
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 3))
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, 3)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, 3)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
@@ -83,7 +89,7 @@ class TotalCap3D(Dataset):
                     elif(action == "freestyle"):
                         for subact in [1,3]: # subactions
                             print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
-                            filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, subact)
+                            filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, subact)
                             action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                             n, d = action_sequence.shape
                             even_list = range(0, n, self.sample_rate)
@@ -100,7 +106,7 @@ class TotalCap3D(Dataset):
                             
                     else:### (action =="walking"):
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 2))
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, 2)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, 2)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
@@ -119,7 +125,7 @@ class TotalCap3D(Dataset):
                     ## freesytle
                     if(action == "freestyle"):
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 1))
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, 1)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, 1)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
@@ -131,7 +137,7 @@ class TotalCap3D(Dataset):
                         self.p3d[key] = the_seq1.view(num_frames1, -1).cpu().data.numpy()
 
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 3))
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, 3)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, 3)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
@@ -157,7 +163,7 @@ class TotalCap3D(Dataset):
                     ## acting or rom3 
                     elif action ==("acting") or action == ("rom"):
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 3))
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, 3)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, 3)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
@@ -176,7 +182,7 @@ class TotalCap3D(Dataset):
 
                     else:  
                         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 2))
-                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_dataset, subj, action, 2)
+                        filename = '{0}/s{1}/{2}{3}/gt_skel_gbl_pos.txt'.format(self.path_to_data, subj, action, 2)
                         action_sequence = data_utils.readCSVasFloat_TotalCap(filename)
                         n, d = action_sequence.shape
                         even_list = range(0, n, self.sample_rate)
