@@ -16,6 +16,14 @@ def mpjpe_error(batch_pred,batch_gt):
     batch_gt=batch_gt.contiguous().view(-1,3)
 
     return torch.mean(torch.norm(batch_gt-batch_pred,2,1))
+
+def mpjpe_error_frame(batch_pred,batch_gt,frame): 
+
+
+    batch_pred=batch_pred[:, frame, :, :].contiguous().view(-1,3)
+    batch_gt=batch_gt[:, frame, :, :].contiguous().view(-1,3)
+
+    return torch.mean(torch.norm(batch_gt-batch_pred,2,1))
     
     
 def euler_error(ang_pred, ang_gt):

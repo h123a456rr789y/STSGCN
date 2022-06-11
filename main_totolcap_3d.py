@@ -126,22 +126,23 @@ def train():
 def test():
 
   model.load_state_dict(torch.load(os.path.join(args.model_path,model_name)))
+  
+  if args.output_n == 15:
+      eval_frame = [2, 5, 11, 14]
+  elif args.output_n == 30:
+      eval_frame = [2, 5, 11, 14, 17, 23, 29]
+  t_3d = np.zeros(len(eval_frame))
+  all_3d = np.zeros(len(eval_frame))
+
   model.eval()
   accum_loss=0  
   n_batches=0 # number of batches for all the sequences
   actions=define_actions_TotalCap(args.actions_to_consider)
   dim_used = np.array(list(range(0, 63)))
-  # dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
-  #                   26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-  #                   46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
-  #                   75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
-  # joints at same loc
-  # joint_to_ignore = np.array([16, 20, 23, 24, 28, 31])
-  # index_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
-  # joint_equal = np.array([13, 19, 22, 13, 27, 30])
-  # index_to_equal = np.concatenate((joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
 
   for action in actions:
+    for i in range(len(t_3d)):
+      t_3d[i]=0
     running_loss=0
     n=0
     dataset_test = datasets.TotalCap3D(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
@@ -172,12 +173,28 @@ def test():
 
         # all_joints_seq[:,:,index_to_ignore] = all_joints_seq[:,:,index_to_equal]
 
+        for k in np.arange(0, len(eval_frame)):
+            j = eval_frame[k]
+            t_3d[k] += batch_dim*mpjpe_error_frame(all_joints_seq.view(-1,args.output_n,21,3),sequences_gt.view(-1,args.output_n,21,3),j)
+        
+
         loss=mpjpe_error(all_joints_seq.view(-1,args.output_n,21,3),sequences_gt.view(-1,args.output_n,21,3))
         running_loss+=loss*batch_dim
         accum_loss+=loss*batch_dim
 
+    for i in range(len(t_3d)):
+        j = eval_frame[i]
+        print('loss at test subject for action ' +str(action) + ' in frame ' + str(j) + ' is: '+ str((t_3d[i]/n)*25.4))
+
     print('loss at test subject for action : '+str(action)+ ' is: '+ str((running_loss/n)*25.4))
     n_batches+=n
+    
+    for i in range(len(t_3d)):
+      all_3d[i] += ((t_3d[i]/n)*25.4)
+  for i in range(len(all_3d)):
+    j = eval_frame[i]
+    print('overall average loss' + ' in frame ' + str(j) +  ' in mm is: '+ str(all_3d[i]/len(actions)))
+
   print('overall average loss in mm is: '+str((accum_loss/n_batches)*25.4))
 
 

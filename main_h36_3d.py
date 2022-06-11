@@ -123,8 +123,20 @@ def train():
         plt.show()
 
 def test():
-
   model.load_state_dict(torch.load(os.path.join(args.model_path,model_name)))
+
+  if args.output_n == 10:
+      eval_frame = [1, 3, 7, 9]
+  elif args.output_n == 30:
+      eval_frame = [1, 3, 7, 9, 13, 24]
+
+  # if output_n == 25:
+  #       eval_frame = [1, 3, 7, 9, 13, 24]
+  # elif output_n == 10:
+  #       eval_frame = [1, 3, 7, 9]
+  t_3d = np.zeros(len(eval_frame))
+  all_3d = np.zeros(len(eval_frame))
+
   model.eval()
   accum_loss=0  
   n_batches=0 # number of batches for all the sequences
@@ -140,6 +152,8 @@ def test():
   index_to_equal = np.concatenate((joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
 
   for action in actions:
+    for i in range(len(t_3d)):
+      t_3d[i]=0
     running_loss=0
     n=0
     dataset_test = datasets.Datasets(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
@@ -170,12 +184,31 @@ def test():
 
         all_joints_seq[:,:,index_to_ignore] = all_joints_seq[:,:,index_to_equal]
 
+        for k in np.arange(0, len(eval_frame)):
+            j = eval_frame[k]
+            t_3d[k] += batch_dim*mpjpe_error_frame(all_joints_seq.view(-1,args.output_n,32,3),sequences_gt.view(-1,args.output_n,32,3),j)
+
+
         loss=mpjpe_error(all_joints_seq.view(-1,args.output_n,32,3),sequences_gt.view(-1,args.output_n,32,3))
         running_loss+=loss*batch_dim
         accum_loss+=loss*batch_dim
 
+    for i in range(len(t_3d)):
+        j = eval_frame[i]
+        print('loss at test subject for action ' +str(action) + ' in frame ' + str(j) + ' is: '+ str((t_3d[i]/n)))
+    
     print('loss at test subject for action : '+str(action)+ ' is: '+ str(running_loss/n))
     n_batches+=n
+  
+    
+    for i in range(len(t_3d)):
+      all_3d[i] += (t_3d[i]/n)
+
+  for i in range(len(all_3d)):
+    j = eval_frame[i]
+    print('overall average loss' + ' in frame ' + str(j) +  ' in mm is: '+str((all_3d[i]/len(actions))))
+
+
   print('overall average loss in mm is: '+str(accum_loss/n_batches))
 
 
