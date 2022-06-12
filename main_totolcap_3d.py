@@ -191,9 +191,10 @@ def test():
     
     for i in range(len(t_3d)):
       all_3d[i] += ((t_3d[i]/n)*25.4)
+
   for i in range(len(all_3d)):
     j = eval_frame[i]
-    print('overall average loss' + ' in frame ' + str(j) +  ' in mm is: '+ str(all_3d[i]/len(actions)))
+    print('overall average loss' + ' in frame ' + str(j) +  ' in mm is: '+ str((all_3d[i]/len(actions))))
 
   print('overall average loss in mm is: '+str((accum_loss/n_batches)*25.4))
 
